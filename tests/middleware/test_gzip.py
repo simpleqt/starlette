@@ -504,6 +504,20 @@ def test_gzip_excluded_content_type_trailers(test_client_factory: TestClientFact
     assert response.extensions["http.response.trailers"] == [(b"grpc-status", b"0")]
 
 
+def test_gzip_preserves_debug(test_client_factory: TestClientFactory) -> None:
+    info = {"template": "example.html", "context": {"request": {}}}
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await send({"type": "http.response.debug", "info": info})
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"x" * 4000})
+
+    client = test_client_factory(GZipMiddleware(app))
+    response = client.get("/", headers={"accept-encoding": "gzip"})
+    assert response.content == b"x" * 4000
+    assert response.extensions["http.response.debug"] == info
+
+
 @pytest.mark.anyio
 async def test_gzip_sends_response_start_before_first_body_when_not_compressed() -> None:
     events: list[Message] = []
